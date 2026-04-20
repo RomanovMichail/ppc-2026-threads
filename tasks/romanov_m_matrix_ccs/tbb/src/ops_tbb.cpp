@@ -7,7 +7,7 @@
 #include <cstddef>
 #include <vector>
 
-#include "util/include/util.hpp"
+#include "romanov_m_matrix_ccs/common/include/common.hpp"
 
 namespace romanov_m_matrix_ccs {
 
@@ -65,7 +65,8 @@ bool RomanovMMatrixCCSTBB::RunImpl() {
   std::vector<std::vector<double>> temp_vals(c.cols_num);
   std::vector<std::vector<size_t>> temp_rows(c.cols_num);
 
-  tbb::parallel_for(size_t(0), b.cols_num, [&](size_t j) { MultiplyColumn(j, a, b, temp_vals[j], temp_rows[j]); });
+  tbb::parallel_for(static_cast<size_t>(0), b.cols_num,
+                    [&](size_t j) { MultiplyColumn(j, a, b, temp_vals[j], temp_rows[j]); });
 
   size_t total_nnz = 0;
   for (size_t j = 0; j < b.cols_num; ++j) {
