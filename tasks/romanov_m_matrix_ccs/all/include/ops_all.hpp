@@ -1,8 +1,7 @@
 #pragma once
 
-#include <mpi.h>
-
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "romanov_m_matrix_ccs/common/include/common.hpp"
@@ -25,9 +24,14 @@ class RomanovMMatrixCCSALL : public BaseTask {
 
   static void MultiplyColumn(size_t col_index, const MatrixCCS &a, const MatrixCCS &b, std::vector<double> &temp_v,
                              std::vector<size_t> &temp_r);
-  void SyncMatrixData(int rank, MatrixCCS &a, MatrixCCS &b);
-  void CollectResults(int rank, int size, int chunk, int remainder, std::vector<std::vector<double>> &local_v,
-                      std::vector<std::vector<size_t>> &local_r);
+
+  static void SyncMatrixData(int rank, MatrixCCS &a, MatrixCCS &b);
+
+  static void MasterCollect(int size, int chunk, int remainder, std::vector<std::vector<double>> &all_v,
+                            std::vector<std::vector<size_t>> &all_r);
+
+  static void WorkerSend(int local_count, std::vector<std::vector<double>> &local_v,
+                         std::vector<std::vector<size_t>> &local_r);
 };
 
 }  // namespace romanov_m_matrix_ccs
