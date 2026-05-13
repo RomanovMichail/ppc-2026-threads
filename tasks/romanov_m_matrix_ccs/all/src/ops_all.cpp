@@ -64,7 +64,9 @@ bool RomanovMMatrixCCSALL::ValidationImpl() {
   return res == 1;
 }
 
-bool RomanovMMatrixCCSALL::PreProcessingImpl() { return true; }
+bool RomanovMMatrixCCSALL::PreProcessingImpl() {
+  return true;
+}
 
 void RomanovMMatrixCCSALL::MultiplyColumn(size_t col_index, const MatrixCCS &a, const MatrixCCS &b,
                                           std::vector<double> &temp_v, std::vector<size_t> &temp_r) {
@@ -243,6 +245,8 @@ bool RomanovMMatrixCCSALL::RunImpl() {
   return true;
 }
 
-bool RomanovMMatrixCCSALL::PostProcessingImpl() { return true; }
+bool RomanovMMatrixCCSALL::PostProcessingImpl() {
+  return true;
+}
 
 }  // namespace romanov_m_matrix_ccs
