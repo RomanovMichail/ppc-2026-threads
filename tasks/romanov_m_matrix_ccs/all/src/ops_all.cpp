@@ -1,11 +1,13 @@
 #include "romanov_m_matrix_ccs/all/include/ops_all.hpp"
+
 #include <mpi.h>
 #include <tbb/parallel_for.h>
+
 #include <algorithm>
 #include <cmath>
-#include <vector>
-#include <utility>
 #include <cstdint>
+#include <utility>
+#include <vector>
 
 namespace romanov_m_matrix_ccs {
 
@@ -17,7 +19,7 @@ RomanovMMatrixCCSALL::RomanovMMatrixCCSALL(const InType &in) {
 bool RomanovMMatrixCCSALL::ValidationImpl() {
   int rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  
+
   if (rank == 0) {
     auto &left = GetInput().first;
     auto &right = GetInput().second;
@@ -25,13 +27,15 @@ bool RomanovMMatrixCCSALL::ValidationImpl() {
     MPI_Bcast(&res, 1, MPI_INT, 0, MPI_COMM_WORLD);
     return res == 1;
   }
-  
+
   int res_other = 0;
   MPI_Bcast(&res_other, 1, MPI_INT, 0, MPI_COMM_WORLD);
   return res_other == 1;
 }
 
-bool RomanovMMatrixCCSALL::PreProcessingImpl() { return true; }
+bool RomanovMMatrixCCSALL::PreProcessingImpl() {
+  return true;
+}
 
 void RomanovMMatrixCCSALL::MultiplyColumn(size_t col_index, const MatrixCCS &a, const MatrixCCS &b,
                                           std::vector<double> &temp_v, std::vector<size_t> &temp_r) {
@@ -198,6 +202,8 @@ bool RomanovMMatrixCCSALL::RunImpl() {
   return true;
 }
 
-bool RomanovMMatrixCCSALL::PostProcessingImpl() { return true; }
-
+bool RomanovMMatrixCCSALL::PostProcessingImpl() {
+  return true;
 }
+
+}  // namespace romanov_m_matrix_ccs
