@@ -1,13 +1,15 @@
 #include "romanov_m_matrix_ccs/all/include/ops_all.hpp"
 
-#include <mpi.h>
 #include <tbb/parallel_for.h>
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
+#include <cstddef>
 #include <utility>
 #include <vector>
+
+#include "romanov_m_matrix_ccs/common/include/common.hpp"
+#include "task/include/task.hpp"
 
 namespace romanov_m_matrix_ccs {
 
@@ -19,18 +21,14 @@ RomanovMMatrixCCSALL::RomanovMMatrixCCSALL(const InType &in) {
 bool RomanovMMatrixCCSALL::ValidationImpl() {
   int rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
+  int res = 0;
   if (rank == 0) {
     auto &left = GetInput().first;
     auto &right = GetInput().second;
-    int res = (left.cols_num == right.rows_num && left.cols_num > 0) ? 1 : 0;
-    MPI_Bcast(&res, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    return res == 1;
+    res = (left.cols_num == right.rows_num && left.cols_num > 0) ? 1 : 0;
   }
-
-  int res_other = 0;
-  MPI_Bcast(&res_other, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  return res_other == 1;
+  MPI_Bcast(&res, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  return res == 1;
 }
 
 bool RomanovMMatrixCCSALL::PreProcessingImpl() {
@@ -47,12 +45,12 @@ void RomanovMMatrixCCSALL::MultiplyColumn(size_t col_index, const MatrixCCS &a, 
     size_t k = b.row_inds[kb];
     double v_b = b.vals[kb];
     for (size_t ka = a.col_ptrs[k]; ka < a.col_ptrs[k + 1]; ++ka) {
-      size_t i = a.row_inds[ka];
-      if (!row_mask[i]) {
-        row_mask[i] = true;
-        active_rows.push_back(i);
+      size_t row_i = a.row_inds[ka];
+      if (!row_mask[row_i]) {
+        row_mask[row_i] = true;
+        active_rows.push_back(row_i);
       }
-      accumulator[i] += a.vals[ka] * v_b;
+      accumulator[row_i] += a.vals[ka] * v_b;
     }
   }
 
@@ -65,21 +63,7 @@ void RomanovMMatrixCCSALL::MultiplyColumn(size_t col_index, const MatrixCCS &a, 
   }
 }
 
-bool RomanovMMatrixCCSALL::RunImpl() {
-  int rank = 0;
-  int size = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-  auto &c = GetOutput();
-  if (rank == 0) {
-    c.vals.clear();
-    c.row_inds.clear();
-  }
-
-  MatrixCCS a = GetInput().first;
-  MatrixCCS b = GetInput().second;
-
+void RomanovMMatrixCCSALL::SyncMatrixData(int rank, MatrixCCS &a, MatrixCCS &b) {
   std::vector<int> dims(3, 0);
   if (rank == 0) {
     dims[0] = static_cast<int>(a.rows_num);
@@ -97,109 +81,99 @@ bool RomanovMMatrixCCSALL::RunImpl() {
     b.col_ptrs.resize(b.cols_num + 1);
   }
 
-  MPI_Bcast(a.col_ptrs.data(), static_cast<int>(a.cols_num + 1), MPI_UINT64_T, 0, MPI_COMM_WORLD);
+  MPI_Bcast(a.col_ptrs.data(), static_cast<int>(a.cols_num + 1), MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
   if (rank != 0) {
     a.row_inds.resize(a.col_ptrs[a.cols_num]);
     a.vals.resize(a.col_ptrs[a.cols_num]);
   }
-  MPI_Bcast(a.row_inds.data(), static_cast<int>(a.col_ptrs[a.cols_num]), MPI_UINT64_T, 0, MPI_COMM_WORLD);
+  MPI_Bcast(a.row_inds.data(), static_cast<int>(a.col_ptrs[a.cols_num]), MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
   MPI_Bcast(a.vals.data(), static_cast<int>(a.col_ptrs[a.cols_num]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-  MPI_Bcast(b.col_ptrs.data(), static_cast<int>(b.cols_num + 1), MPI_UINT64_T, 0, MPI_COMM_WORLD);
+  MPI_Bcast(b.col_ptrs.data(), static_cast<int>(b.cols_num + 1), MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
   if (rank != 0) {
     b.row_inds.resize(b.col_ptrs[b.cols_num]);
     b.vals.resize(b.col_ptrs[b.cols_num]);
   }
-  MPI_Bcast(b.row_inds.data(), static_cast<int>(b.col_ptrs[b.cols_num]), MPI_UINT64_T, 0, MPI_COMM_WORLD);
+  MPI_Bcast(b.row_inds.data(), static_cast<int>(b.col_ptrs[b.cols_num]), MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
   MPI_Bcast(b.vals.data(), static_cast<int>(b.col_ptrs[b.cols_num]), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+}
 
-  int total_cols = static_cast<int>(b.cols_num);
+bool RomanovMMatrixCCSALL::RunImpl() {
+  int rank = 0;
+  int size = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+  MatrixCCS a_mat = GetInput().first;
+  MatrixCCS b_mat = GetInput().second;
+  SyncMatrixData(rank, a_mat, b_mat);
+
+  int total_cols = static_cast<int>(b_mat.cols_num);
   int chunk = total_cols / size;
   int remainder = total_cols % size;
   int start_col = (rank * chunk) + std::min(rank, remainder);
   int end_col = start_col + chunk + ((rank < remainder) ? 1 : 0);
-  int local_cols_count = end_col - start_col;
+  int local_count = end_col - start_col;
 
-  std::vector<std::vector<double>> local_temp_vals(local_cols_count);
-  std::vector<std::vector<size_t>> local_temp_rows(local_cols_count);
+  std::vector<std::vector<double>> local_v(local_count);
+  std::vector<std::vector<size_t>> local_r(local_count);
 
-  tbb::parallel_for(0, local_cols_count, [&](int i) {
-    MultiplyColumn(static_cast<size_t>(start_col + i), a, b, local_temp_vals[i], local_temp_rows[i]);
+  tbb::parallel_for(0, local_count, [&](int i) {
+    MultiplyColumn(static_cast<size_t>(start_col + i), a_mat, b_mat, local_v[i], local_r[i]);
   });
 
+  CollectResults(rank, size, chunk, remainder, local_v, local_r);
+  MPI_Barrier(MPI_COMM_WORLD);
+  return true;
+}
+
+void RomanovMMatrixCCSALL::CollectResults(int rank, int size, int chunk, int remainder,
+                                          std::vector<std::vector<double>> &local_v,
+                                          std::vector<std::vector<size_t>> &local_r) {
+  auto &c_mat = GetOutput();
+  int total_cols = (rank == 0) ? static_cast<int>(GetInput().second.cols_num) : 0;
+
   if (rank == 0) {
-    c.rows_num = a.rows_num;
-    c.cols_num = b.cols_num;
-    c.col_ptrs.assign(c.cols_num + 1, 0);
-    std::vector<std::vector<double>> all_vals(b.cols_num);
-    std::vector<std::vector<size_t>> all_rows(b.cols_num);
-
-    for (int i = 0; i < local_cols_count; ++i) {
-      all_vals[start_col + i] = std::move(local_temp_vals[i]);
-      all_rows[start_col + i] = std::move(local_temp_rows[i]);
+    std::vector<std::vector<double>> all_v(total_cols);
+    std::vector<std::vector<size_t>> all_r(total_cols);
+    int start = std::min(rank, remainder) + rank * chunk;
+    for (size_t i = 0; i < local_v.size(); ++i) {
+      all_v[start + i] = std::move(local_v[i]);
+      all_r[start + i] = std::move(local_r[i]);
     }
-
-    for (int proc_idx = 1; proc_idx < size; ++proc_idx) {
-      int p_start = (proc_idx * chunk) + std::min(proc_idx, remainder);
-      int p_end = p_start + chunk + ((proc_idx < remainder) ? 1 : 0);
-      int p_cols = p_end - p_start;
+    for (int p = 1; p < size; ++p) {
+      int p_start = (p * chunk) + std::min(p, remainder);
+      int p_cols = (chunk + ((p < remainder) ? 1 : 0));
       for (int i = 0; i < p_cols; ++i) {
-        int nnz_p = 0;
-        MPI_Recv(&nnz_p, 1, MPI_INT, proc_idx, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        all_vals[p_start + i].resize(nnz_p);
-        all_rows[p_start + i].resize(nnz_p);
-        if (nnz_p > 0) {
-          MPI_Recv(all_vals[p_start + i].data(), nnz_p, MPI_DOUBLE, proc_idx, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-          MPI_Recv(all_rows[p_start + i].data(), nnz_p, MPI_UINT64_T, proc_idx, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        int nnz = 0;
+        MPI_Recv(&nnz, 1, MPI_INT, p, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        all_v[p_start + i].resize(nnz);
+        all_r[p_start + i].resize(nnz);
+        if (nnz > 0) {
+          MPI_Recv(all_v[p_start + i].data(), nnz, MPI_DOUBLE, p, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+          MPI_Recv(all_r[p_start + i].data(), nnz, MPI_UNSIGNED_LONG, p, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
       }
     }
-
-    size_t total_nnz = 0;
-    for (size_t j = 0; j < b.cols_num; ++j) {
-      c.col_ptrs[j] = total_nnz;
-      total_nnz += all_vals[j].size();
-      c.vals.insert(c.vals.end(), all_vals[j].begin(), all_vals[j].end());
-      c.row_inds.insert(c.row_inds.end(), all_rows[j].begin(), all_rows[j].end());
+    c_mat.rows_num = GetInput().first.rows_num;
+    c_mat.cols_num = total_cols;
+    c_mat.col_ptrs.assign(total_cols + 1, 0);
+    for (int j = 0; j < total_cols; ++j) {
+      c_mat.col_ptrs[j + 1] = c_mat.col_ptrs[j] + all_v[j].size();
+      c_mat.vals.insert(c_mat.vals.end(), all_v[j].begin(), all_v[j].end());
+      c_mat.row_inds.insert(c_mat.row_inds.end(), all_r[j].begin(), all_r[j].end());
     }
-    c.col_ptrs[b.cols_num] = total_nnz;
-    c.nnz = total_nnz;
+    c_mat.nnz = c_mat.vals.size();
   } else {
-    for (int i = 0; i < local_cols_count; ++i) {
-      int nnz_local = static_cast<int>(local_temp_vals[i].size());
-      MPI_Send(&nnz_local, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-      if (nnz_local > 0) {
-        MPI_Send(local_temp_vals[i].data(), nnz_local, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
-        MPI_Send(local_temp_rows[i].data(), nnz_local, MPI_UINT64_T, 0, 2, MPI_COMM_WORLD);
+    for (size_t i = 0; i < local_v.size(); ++i) {
+      int nnz = static_cast<int>(local_v[i].size());
+      MPI_Send(&nnz, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+      if (nnz > 0) {
+        MPI_Send(local_v[i].data(), nnz, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
+        MPI_Send(local_r[i].data(), nnz, MPI_UNSIGNED_LONG, 0, 2, MPI_COMM_WORLD);
       }
     }
   }
-
-  std::vector<int> final_res(3, 0);
-  if (rank == 0) {
-    final_res[0] = static_cast<int>(c.rows_num);
-    final_res[1] = static_cast<int>(c.cols_num);
-    final_res[2] = static_cast<int>(c.nnz);
-  }
-  MPI_Bcast(final_res.data(), 3, MPI_INT, 0, MPI_COMM_WORLD);
-
-  if (rank != 0) {
-    c.rows_num = static_cast<size_t>(final_res[0]);
-    c.cols_num = static_cast<size_t>(final_res[1]);
-    c.nnz = static_cast<size_t>(final_res[2]);
-    c.col_ptrs.resize(c.cols_num + 1);
-    c.vals.resize(c.nnz);
-    c.row_inds.resize(c.nnz);
-  }
-
-  MPI_Bcast(c.col_ptrs.data(), static_cast<int>(c.cols_num + 1), MPI_UINT64_T, 0, MPI_COMM_WORLD);
-  if (c.nnz > 0) {
-    MPI_Bcast(c.vals.data(), static_cast<int>(c.nnz), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Bcast(c.row_inds.data(), static_cast<int>(c.nnz), MPI_UINT64_T, 0, MPI_COMM_WORLD);
-  }
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  return true;
 }
 
 bool RomanovMMatrixCCSALL::PostProcessingImpl() {
