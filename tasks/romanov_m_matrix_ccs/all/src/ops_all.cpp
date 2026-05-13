@@ -7,6 +7,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -16,8 +17,10 @@ namespace romanov_m_matrix_ccs {
 
 namespace {
 
+using uint64 = uint64_t;
+
 void BroadcastSizeTVector(int rank, std::vector<size_t> &data, size_t size) {
-  std::vector<unsigned long> temp;
+  std::vector<uint64> temp;
 
   if (rank == 0) {
     temp.assign(data.begin(), data.end());
@@ -25,7 +28,7 @@ void BroadcastSizeTVector(int rank, std::vector<size_t> &data, size_t size) {
     temp.resize(size);
   }
 
-  MPI_Bcast(temp.data(), static_cast<int>(size), MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+  MPI_Bcast(temp.data(), static_cast<int>(size), MPI_UINT64_T, 0, MPI_COMM_WORLD);
 
   if (rank != 0) {
     data.assign(temp.begin(), temp.end());
@@ -33,15 +36,15 @@ void BroadcastSizeTVector(int rank, std::vector<size_t> &data, size_t size) {
 }
 
 void SendSizeTVector(const std::vector<size_t> &data) {
-  std::vector<unsigned long> temp(data.begin(), data.end());
+  std::vector<uint64> temp(data.begin(), data.end());
 
-  MPI_Send(temp.data(), static_cast<int>(temp.size()), MPI_UNSIGNED_LONG, 0, 2, MPI_COMM_WORLD);
+  MPI_Send(temp.data(), static_cast<int>(temp.size()), MPI_UINT64_T, 0, 2, MPI_COMM_WORLD);
 }
 
 void RecvSizeTVector(std::vector<size_t> &data, int nnz, int proc) {
-  std::vector<unsigned long> temp(nnz);
+  std::vector<uint64> temp(nnz);
 
-  MPI_Recv(temp.data(), nnz, MPI_UNSIGNED_LONG, proc, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  MPI_Recv(temp.data(), nnz, MPI_UINT64_T, proc, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
   data.assign(temp.begin(), temp.end());
 }
@@ -109,7 +112,7 @@ void RomanovMMatrixCCSALL::MultiplyColumn(size_t col_index, const MatrixCCS &a, 
 }
 
 void RomanovMMatrixCCSALL::SyncMatrixData(int rank, MatrixCCS &a, MatrixCCS &b) {
-  std::array<unsigned long, 3> dims{};
+  std::array<uint64, 3> dims{};
 
   if (rank == 0) {
     dims[0] = a.rows_num;
@@ -117,7 +120,7 @@ void RomanovMMatrixCCSALL::SyncMatrixData(int rank, MatrixCCS &a, MatrixCCS &b) 
     dims[2] = b.cols_num;
   }
 
-  MPI_Bcast(dims.data(), 3, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+  MPI_Bcast(dims.data(), 3, MPI_UINT64_T, 0, MPI_COMM_WORLD);
 
   if (rank != 0) {
     a.rows_num = dims[0];
@@ -267,7 +270,7 @@ bool RomanovMMatrixCCSALL::RunImpl() {
     WorkerSend(local_count, local_v, local_r);
   }
 
-  std::array<unsigned long, 3> final_dims{};
+  std::array<uint64, 3> final_dims{};
 
   if (rank == 0) {
     final_dims[0] = c_mat.rows_num;
@@ -275,7 +278,7 @@ bool RomanovMMatrixCCSALL::RunImpl() {
     final_dims[2] = c_mat.nnz;
   }
 
-  MPI_Bcast(final_dims.data(), 3, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+  MPI_Bcast(final_dims.data(), 3, MPI_UINT64_T, 0, MPI_COMM_WORLD);
 
   if (rank != 0) {
     c_mat.rows_num = final_dims[0];
