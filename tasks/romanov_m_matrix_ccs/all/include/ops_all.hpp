@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
 #include <vector>
 
 #include "romanov_m_matrix_ccs/common/include/common.hpp"
