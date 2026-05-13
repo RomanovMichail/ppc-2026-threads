@@ -17,10 +17,8 @@ namespace romanov_m_matrix_ccs {
 
 namespace {
 
-using uint64 = uint64_t;
-
 void BroadcastSizeTVector(int rank, std::vector<size_t> &data, size_t size) {
-  std::vector<uint64> temp;
+  std::vector<uint64_t> temp;
 
   if (rank == 0) {
     temp.assign(data.begin(), data.end());
@@ -36,13 +34,13 @@ void BroadcastSizeTVector(int rank, std::vector<size_t> &data, size_t size) {
 }
 
 void SendSizeTVector(const std::vector<size_t> &data) {
-  std::vector<uint64> temp(data.begin(), data.end());
+  std::vector<uint64_t> temp(data.begin(), data.end());
 
   MPI_Send(temp.data(), static_cast<int>(temp.size()), MPI_UINT64_T, 0, 2, MPI_COMM_WORLD);
 }
 
 void RecvSizeTVector(std::vector<size_t> &data, int nnz, int proc) {
-  std::vector<uint64> temp(nnz);
+  std::vector<uint64_t> temp(nnz);
 
   MPI_Recv(temp.data(), nnz, MPI_UINT64_T, proc, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
@@ -112,7 +110,7 @@ void RomanovMMatrixCCSALL::MultiplyColumn(size_t col_index, const MatrixCCS &a, 
 }
 
 void RomanovMMatrixCCSALL::SyncMatrixData(int rank, MatrixCCS &a, MatrixCCS &b) {
-  std::array<uint64, 3> dims{};
+  std::array<uint64_t, 3> dims{};
 
   if (rank == 0) {
     dims[0] = a.rows_num;
@@ -270,7 +268,7 @@ bool RomanovMMatrixCCSALL::RunImpl() {
     WorkerSend(local_count, local_v, local_r);
   }
 
-  std::array<uint64, 3> final_dims{};
+  std::array<uint64_t, 3> final_dims{};
 
   if (rank == 0) {
     final_dims[0] = c_mat.rows_num;
