@@ -1,16 +1,16 @@
 #pragma once
 
-#include "klimenko_v_lsh_contrast_incr_seq/common/include/common.hpp"
+#include "romanov_m_matrix_ccs/common/include/common.hpp"
 #include "task/include/task.hpp"
 
-namespace klimenko_v_lsh_contrast_incr_seq {
+namespace romanov_m_matrix_ccs {
 
-class KlimenkoVLSHContrastIncrSEQ : public BaseTask {
+class RomanovMMatrixCCSSeq : public BaseTask {
  public:
   static constexpr ppc::task::TypeOfTask GetStaticTypeOfTask() {
     return ppc::task::TypeOfTask::kSEQ;
   }
-  explicit KlimenkoVLSHContrastIncrSEQ(const InType &in);
+  explicit RomanovMMatrixCCSSeq(const InType &in);
 
  private:
   bool ValidationImpl() override;
@@ -19,4 +19,4 @@ class KlimenkoVLSHContrastIncrSEQ : public BaseTask {
   bool PostProcessingImpl() override;
 };
 
-}  // namespace klimenko_v_lsh_contrast_incr_seq
+}  // namespace romanov_m_matrix_ccs
