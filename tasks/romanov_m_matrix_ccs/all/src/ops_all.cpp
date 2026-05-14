@@ -17,7 +17,6 @@ namespace romanov_m_matrix_ccs {
 
 namespace {
 
-// Безопасная передача векторов индексов для Windows/Linux
 void BroadcastSizeTVector(std::vector<size_t> &data, size_t size, int rank) {
   std::vector<uint64_t> buffer;
   if (rank == 0) {
@@ -145,7 +144,7 @@ void RomanovMMatrixCCSALL::MasterCollect(int size, int chunk, int remainder, std
     for (int i = 0; i < p_cols; ++i) {
       int nnz = 0;
       MPI_Recv(&nnz, 1, MPI_INT, proc_idx, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-      size_t target_idx = static_cast<size_t>(p_start + i);
+      auto target_idx = static_cast<size_t>(p_start) + i;
       all_v[target_idx].resize(static_cast<size_t>(nnz));
       all_r[target_idx].resize(static_cast<size_t>(nnz));
       if (nnz > 0) {
@@ -159,11 +158,12 @@ void RomanovMMatrixCCSALL::MasterCollect(int size, int chunk, int remainder, std
 void RomanovMMatrixCCSALL::WorkerSend(int local_count, std::vector<std::vector<double>> &local_v,
                                       std::vector<std::vector<size_t>> &local_r) {
   for (int i = 0; i < local_count; ++i) {
-    int nnz = static_cast<int>(local_v[static_cast<size_t>(i)].size());
+    auto idx = static_cast<size_t>(i);
+    int nnz = static_cast<int>(local_v[idx].size());
     MPI_Send(&nnz, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
     if (nnz > 0) {
-      MPI_Send(local_v[static_cast<size_t>(i)].data(), nnz, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
-      SendSizeTVector(local_r[static_cast<size_t>(i)]);
+      MPI_Send(local_v[idx].data(), nnz, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
+      SendSizeTVector(local_r[idx]);
     }
   }
 }
@@ -190,7 +190,7 @@ bool RomanovMMatrixCCSALL::RunImpl() {
 
   if (local_count > 0) {
     tbb::parallel_for(0, local_count, [&](int i) {
-      MultiplyColumn(static_cast<size_t>(start_col + i), a_mat, b_mat, local_v[static_cast<size_t>(i)],
+      MultiplyColumn(static_cast<size_t>(start_col) + i, a_mat, b_mat, local_v[static_cast<size_t>(i)],
                      local_r[static_cast<size_t>(i)]);
     });
   }
@@ -200,8 +200,10 @@ bool RomanovMMatrixCCSALL::RunImpl() {
     std::vector<std::vector<double>> all_v(static_cast<size_t>(total_cols));
     std::vector<std::vector<size_t>> all_r(static_cast<size_t>(total_cols));
     for (int i = 0; i < local_count; ++i) {
-      all_v[static_cast<size_t>(start_col + i)] = std::move(local_v[static_cast<size_t>(i)]);
-      all_r[static_cast<size_t>(start_col + i)] = std::move(local_r[static_cast<size_t>(i)]);
+      auto global_idx = static_cast<size_t>(start_col) + i;
+      auto l_idx = static_cast<size_t>(i);
+      all_v[global_idx] = std::move(local_v[l_idx]);
+      all_r[global_idx] = std::move(local_r[l_idx]);
     }
     MasterCollect(size, chunk, remainder, all_v, all_r);
 
