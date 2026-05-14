@@ -25,7 +25,7 @@ void BroadcastSizeTVector(std::vector<size_t> &data, size_t size, int rank) {
     buffer.resize(size);
   }
 
-  MPI_Bcast(buffer.data(), static_cast<int>(size), MPI_UINT64_T, 0, MPI_COMM_WORLD);
+  MPI_Bcast(static_cast<void *>(buffer.data()), static_cast<int>(size), MPI_UINT64_T, 0, MPI_COMM_WORLD);
 
   if (rank != 0) {
     data.assign(buffer.begin(), buffer.end());
@@ -34,12 +34,13 @@ void BroadcastSizeTVector(std::vector<size_t> &data, size_t size, int rank) {
 
 void SendSizeTVector(const std::vector<size_t> &data) {
   std::vector<uint64_t> buffer(data.begin(), data.end());
-  MPI_Send(buffer.data(), static_cast<int>(buffer.size()), MPI_UINT64_T, 0, 2, MPI_COMM_WORLD);
+  MPI_Send(static_cast<const void *>(buffer.data()), static_cast<int>(buffer.size()), MPI_UINT64_T, 0, 2,
+           MPI_COMM_WORLD);
 }
 
 void RecvSizeTVector(std::vector<size_t> &data, int nnz, int proc) {
   std::vector<uint64_t> buffer(static_cast<size_t>(nnz));
-  MPI_Recv(buffer.data(), nnz, MPI_UINT64_T, proc, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  MPI_Recv(static_cast<void *>(buffer.data()), nnz, MPI_UINT64_T, proc, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   data.assign(buffer.begin(), buffer.end());
 }
 
@@ -102,7 +103,7 @@ void RomanovMMatrixCCSALL::SyncMatrixData(int rank, MatrixCCS &a, MatrixCCS &b) 
     dims[1] = static_cast<uint64_t>(a.cols_num);
     dims[2] = static_cast<uint64_t>(b.cols_num);
   }
-  MPI_Bcast(dims.data(), 3, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+  MPI_Bcast(static_cast<void *>(dims.data()), 3, MPI_UINT64_T, 0, MPI_COMM_WORLD);
 
   if (rank != 0) {
     a.rows_num = static_cast<size_t>(dims[0]);
@@ -121,7 +122,7 @@ void RomanovMMatrixCCSALL::SyncMatrixData(int rank, MatrixCCS &a, MatrixCCS &b) 
   }
   BroadcastSizeTVector(a.row_inds, a_nnz, rank);
   if (a_nnz > 0) {
-    MPI_Bcast(a.vals.data(), static_cast<int>(a_nnz), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(static_cast<void *>(a.vals.data()), static_cast<int>(a_nnz), MPI_DOUBLE, 0, MPI_COMM_WORLD);
   }
 
   BroadcastSizeTVector(b.col_ptrs, b.cols_num + 1, rank);
@@ -132,7 +133,7 @@ void RomanovMMatrixCCSALL::SyncMatrixData(int rank, MatrixCCS &a, MatrixCCS &b) 
   }
   BroadcastSizeTVector(b.row_inds, b_nnz, rank);
   if (b_nnz > 0) {
-    MPI_Bcast(b.vals.data(), static_cast<int>(b_nnz), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(static_cast<void *>(b.vals.data()), static_cast<int>(b_nnz), MPI_DOUBLE, 0, MPI_COMM_WORLD);
   }
 }
 
@@ -148,7 +149,8 @@ void RomanovMMatrixCCSALL::MasterCollect(int size, int chunk, int remainder, std
       all_v[target_idx].resize(static_cast<size_t>(nnz));
       all_r[target_idx].resize(static_cast<size_t>(nnz));
       if (nnz > 0) {
-        MPI_Recv(all_v[target_idx].data(), nnz, MPI_DOUBLE, proc_idx, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(static_cast<void *>(all_v[target_idx].data()), nnz, MPI_DOUBLE, proc_idx, 1, MPI_COMM_WORLD,
+                 MPI_STATUS_IGNORE);
         RecvSizeTVector(all_r[target_idx], nnz, proc_idx);
       }
     }
@@ -162,7 +164,7 @@ void RomanovMMatrixCCSALL::WorkerSend(int local_count, std::vector<std::vector<d
     int nnz = static_cast<int>(local_v[idx].size());
     MPI_Send(&nnz, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
     if (nnz > 0) {
-      MPI_Send(local_v[idx].data(), nnz, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
+      MPI_Send(static_cast<const void *>(local_v[idx].data()), nnz, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
       SendSizeTVector(local_r[idx]);
     }
   }
@@ -226,7 +228,7 @@ bool RomanovMMatrixCCSALL::RunImpl() {
     final_dims[1] = static_cast<uint64_t>(c_mat.cols_num);
     final_dims[2] = static_cast<uint64_t>(c_mat.nnz);
   }
-  MPI_Bcast(final_dims.data(), 3, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+  MPI_Bcast(static_cast<void *>(final_dims.data()), 3, MPI_UINT64_T, 0, MPI_COMM_WORLD);
 
   if (rank != 0) {
     c_mat.rows_num = static_cast<size_t>(final_dims[0]);
@@ -240,7 +242,7 @@ bool RomanovMMatrixCCSALL::RunImpl() {
   BroadcastSizeTVector(c_mat.col_ptrs, c_mat.cols_num + 1, rank);
   BroadcastSizeTVector(c_mat.row_inds, c_mat.nnz, rank);
   if (c_mat.nnz > 0) {
-    MPI_Bcast(c_mat.vals.data(), static_cast<int>(c_mat.nnz), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(static_cast<void *>(c_mat.vals.data()), static_cast<int>(c_mat.nnz), MPI_DOUBLE, 0, MPI_COMM_WORLD);
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
